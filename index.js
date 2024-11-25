@@ -76,7 +76,7 @@ app.get("/signup", (request, response) => {
 });
 
 // POST /signup - Allows a user to signup
-app.post("/login", (req, res) => {
+app.post("/signup", (req, res) => {
   const { email, password } = req.body; // Use 'email' here to match the form field
   const user = USERS.find((user) => user.email === email); // Check email, not username
 
@@ -98,11 +98,41 @@ app.get("/", (request, response) => {
 
 // GET /landing - Shows a welcome page for users, shows the names of all users if an admin
 app.get("/landing", (req, res) => {
-  if (req.session.userId) {
-    res.send(`Welcome to your dashboard, user ${req.session.userId}`);
-  } else {
-    res.status(401).send("Please log in to view this page.");
+  if (!req.session.userId) {
+    return res.status(401).send("Please log in to view this page.");
   }
+
+  // Find the logged-in user by ID
+  const currentUser = USERS.find((user) => user.id === req.session.userId);
+
+  if (!currentUser) {
+    return res.status(404).send("User not found.");
+  }
+
+  // If the user is an admin, render a list of all users
+  if (currentUser.role === "admin") {
+    return res.render("landing", {
+      username: currentUser.username,
+      users: USERS, // Pass the list of users to the template
+    });
+  }
+
+  // If not an admin, show the dashboard for a regular user
+  res.render("landing", {
+    username: currentUser.username,
+    users: null, // No users list for non-admins
+  });
+});
+
+//POST /logout
+app.post("/logout", (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error("Failed to destroy session:", err);
+      return res.status(500).send("An error occurred while logging out.");
+    }
+    return res.redirect("/");
+  });
 });
 
 // Middleware
