@@ -77,15 +77,33 @@ app.get("/signup", (request, response) => {
 
 // POST /signup - Allows a user to signup
 app.post("/signup", (req, res) => {
-  const { email, password } = req.body; // Use 'email' here to match the form field
-  const user = USERS.find((user) => user.email === email); // Check email, not username
+  const { username, email, password } = req.body;
 
-  if (user && bcrypt.compareSync(password, user.password)) {
-    req.session.userId = user.id; // Store the user's ID in the session
-    res.redirect("/landing"); // Redirect to landing page on success
-  } else {
-    res.status(401).send("Authentication failed: Invalid email or password.");
+  const existingUser = USERS.find((user) => user.email === email);
+  if (existingUser) {
+    return res.status(400).send("A user with this email already exists.");
   }
+
+  // Hash the password
+  const hashedPassword = bcrypt.hashSync(password, SALT_ROUNDS);
+
+  // Create a new user
+  const newUser = {
+    id: USERS.length + 1,
+    username: username,
+    email: email,
+    password: hashedPassword,
+    role: "user",
+  };
+
+  // Add the new user to the USERS array
+  USERS.push(newUser);
+
+  // Log the user in by storing their ID in the session
+  req.session.userId = newUser.id;
+
+  // Redirect to the dashboard
+  res.redirect("/landing");
 });
 
 // GET / - Render index page or redirect to landing if logged in
