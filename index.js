@@ -7,6 +7,20 @@ const app = express();
 const PORT = 3000;
 const SALT_ROUNDS = 10;
 
+const session = require("express-session");
+
+app.use(
+  session({
+    secret: "your-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24,
+      httpOnly: true,
+    },
+  })
+);
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use(
@@ -58,17 +72,21 @@ app.get("/login", (req, res) => {
 // POST /login - Allows a user to login
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
-  const user = USERS.find((user) => user.email === email);
 
-  if (user && bcrypt.compareSync(password, user.password)) {
-    req.session.userId = user.id;
-    res.redirect("/landing");
-  } else {
-    // Pass an error message to the login view
-    res.render("login", {
-      errorMessage: "Invalid email or password. Please try again.",
+  // Find the user by email
+  const user = USERS.find((u) => u.email === email);
+
+  // Validate email and password
+  if (!user || user.password !== password) {
+    return res.render("login", {
+      errorMessage: "Invalid email or password.",
     });
   }
+
+  // Start a session for the user
+  req.session.userId = user.id;
+
+  res.redirect("/landing"); // Redirect to the landing page on successful login
 });
 
 // GET /signup - Render signup form
@@ -80,31 +98,25 @@ app.get("/signup", (request, response) => {
 app.post("/signup", (req, res) => {
   const { username, email, password } = req.body;
 
+  // Check for duplicate email
   const existingUser = USERS.find((user) => user.email === email);
   if (existingUser) {
-    return res.status(400).send("A user with this email already exists.");
+    return res.status(400).send("Email is already registered.");
   }
-
-  // Hash the password
-  const hashedPassword = bcrypt.hashSync(password, SALT_ROUNDS);
 
   // Create a new user
   const newUser = {
-    id: USERS.length + 1,
-    username: username,
-    email: email,
-    password: hashedPassword,
-    role: "user",
+    id: USERS.length + 1, // Incremental ID
+    username,
+    email,
+    password, // In a real app, hash the password before storing
+    role: "user", // Default role for new users
   };
 
-  // Add the new user to the USERS array
+  // Add the user to the array
   USERS.push(newUser);
 
-  // Log the user in by storing their ID in the session
-  req.session.userId = newUser.id;
-
-  // Redirect to the dashboard
-  res.redirect("/landing");
+  res.redirect("/login"); // Redirect to login after successful registration
 });
 
 // GET / - Render index page or redirect to landing if logged in
@@ -116,30 +128,23 @@ app.get("/", (request, response) => {
 });
 
 // GET /landing - Shows a welcome page for users, shows the names of all users if an admin
-app.get("/landing", (req, res) => {
-  if (!req.session.userId) {
-    return res.status(401).send("Please log in to view this page.");
-  }
+app.get("/landing", ensureAuthenticated, (req, res) => {
+  // Find the logged-in user's details based on their session data
+  const user = USERS.find((u) => u.id === req.session.userId);
 
-  // Find the logged-in user by ID
-  const currentUser = USERS.find((user) => user.id === req.session.userId);
-
-  if (!currentUser) {
-    return res.status(404).send("User not found.");
-  }
-
-  // If the user is an admin, render a list of all users
-  if (currentUser.role === "admin") {
-    return res.render("landing", {
-      username: currentUser.username,
-      users: USERS, // Pass the list of users to the template
+  if (!user) {
+    // If the user is not found in the database (e.g., manually deleted), handle the case gracefully
+    req.session.destroy(() => {
+      res.redirect("/login"); // Redirect to the login page
     });
+    return;
   }
 
-  // If not an admin, show the dashboard for a regular user
+  // Render the landing page with the user's information
   res.render("landing", {
-    username: currentUser.username,
-    users: null, // No users list for non-admins
+    username: user.username, // Pass the user's username to the template
+    email: user.email, // Optionally pass additional user details
+    role: user.role, // Pass the user's role (useful for role-based display or actions)
   });
 });
 
@@ -147,14 +152,29 @@ app.get("/landing", (req, res) => {
 app.post("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {
-      console.error("Failed to destroy session:", err);
-      return res.status(500).send("An error occurred while logging out.");
+      return res.redirect("/landing");
     }
-    return res.redirect("/");
+    res.redirect("/login");
   });
 });
 
 // Middleware
+function ensureAuthenticated(req, res, next) {
+  if (req.session.userId) {
+    return next(); // User is authenticated, proceed
+  }
+  res.redirect("/login"); // Redirect to login page if not authenticated
+}
+
+app.use((req, res, next) => {
+  if (req.session.userId) {
+    // Find the logged-in user
+    const user = USERS.find((u) => u.id === req.session.userId);
+    req.user = user; // Attach the user object to the request
+  }
+  next();
+});
+
 app.use((req, res) => {
   res.status(404).send("Page not found");
 });
