@@ -51,13 +51,12 @@ function getUserId(username) {
 }
 
 // GET /login - Render login form
-app.get("/login", (request, response) => {
-  response.render("login");
+app.get("/login", (req, res) => {
+  res.render("login", { errorMessage: null });
 });
 
 // POST /login - Allows a user to login
 app.post("/login", (req, res) => {
-  console.log("Form Data:", req.body); // Log submitted data
   const { email, password } = req.body;
   const user = USERS.find((user) => user.email === email);
 
@@ -65,8 +64,10 @@ app.post("/login", (req, res) => {
     req.session.userId = user.id;
     res.redirect("/landing");
   } else {
-    console.log("Authentication failed: Invalid credentials");
-    res.status(401).send("Authentication failed: Invalid email or password.");
+    // Pass an error message to the login view
+    res.render("login", {
+      errorMessage: "Invalid email or password. Please try again.",
+    });
   }
 });
 
