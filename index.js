@@ -54,7 +54,13 @@ function getUserId(username) {
 
 // GET /login - Render login form
 app.get("/login", (req, res) => {
-  res.render("login", { errorMessage: null });
+  const registrationSuccess = req.query.registration === "success";
+  res.render("login", {
+    errorMessage: null,
+    registrationMessage: registrationSuccess
+      ? "Registration successful. Please log in."
+      : null,
+  });
 });
 
 // POST /login - Allows a user to login
@@ -75,7 +81,7 @@ app.post("/login", (req, res) => {
 
   // Start a session for the user
   req.session.userId = user.id;
-  console.log("Session userId set to:", req.session.userId); // Log the session data
+  console.log("Session userId set to:", req.session.userId);
 
   res.redirect("/landing"); // Redirect to the landing page on successful login
 });
@@ -92,9 +98,8 @@ app.post("/signup", (req, res) => {
   // Check for duplicate email
   const existingUser = USERS.find((user) => user.email === email);
   if (existingUser) {
-    // Pass the error message when rendering the signup page again
     return res.render("signup", {
-      errorMessage: "Email is already registered.", // Pass the error message to the template
+      errorMessage: "Email is already registered.",
     });
   }
 
@@ -104,13 +109,14 @@ app.post("/signup", (req, res) => {
     username,
     email,
     password, // In a real app, hash the password before storing
-    role: "user", // Default role for new users
+    role: "user",
   };
 
   // Add the user to the array
   USERS.push(newUser);
 
-  res.redirect("/login"); // Redirect to login after successful registration
+  // Redirect to login page with success message
+  res.redirect("/login?registration=success");
 });
 
 // GET / - Render index page or redirect to landing if logged in
