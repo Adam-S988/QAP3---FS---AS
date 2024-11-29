@@ -92,7 +92,10 @@ app.post("/signup", (req, res) => {
   // Check for duplicate email
   const existingUser = USERS.find((user) => user.email === email);
   if (existingUser) {
-    return res.status(400).send("Email is already registered.");
+    // Pass the error message when rendering the signup page again
+    return res.render("signup", {
+      errorMessage: "Email is already registered.", // Pass the error message to the template
+    });
   }
 
   // Create a new user
