@@ -7,12 +7,10 @@ const app = express();
 const PORT = 3000;
 const SALT_ROUNDS = 10;
 
-const session = require("express-session");
-
 app.use(
   session({
     secret: "your-secret-key",
-    resave: false,
+    resave: true, // Temporarily set to true to debug
     saveUninitialized: false,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24,
@@ -23,14 +21,6 @@ app.use(
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
-app.use(
-  session({
-    secret: "replace_this_with_a_secure_key",
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false },
-  })
-);
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
@@ -40,9 +30,7 @@ const USERS = [
     id: 1,
     username: "AdminUser",
     email: "admin@example.com",
-    password: bcrypt.hashSync("admin123", SALT_ROUNDS), //In a database, you'd just store the hashes, but for
-    // our purposes we'll hash these existing users when the
-    // app loads
+    password: bcrypt.hashSync("admin123", SALT_ROUNDS), // Hash the password for storage
     role: "admin",
   },
   {
@@ -50,7 +38,7 @@ const USERS = [
     username: "RegularUser",
     email: "user@example.com",
     password: bcrypt.hashSync("user123", SALT_ROUNDS),
-    role: "user", // Regular user
+    role: "user",
   },
 ];
 
@@ -75,9 +63,11 @@ app.post("/login", (req, res) => {
 
   // Find the user by email
   const user = USERS.find((u) => u.email === email);
+  console.log(user); // Log the user found (if any)
 
   // Validate email and password
-  if (!user || user.password !== password) {
+  if (!user || !bcrypt.compareSync(password, user.password)) {
+    console.log("Invalid credentials");
     return res.render("login", {
       errorMessage: "Invalid email or password.",
     });
@@ -85,13 +75,14 @@ app.post("/login", (req, res) => {
 
   // Start a session for the user
   req.session.userId = user.id;
+  console.log("Session userId set to:", req.session.userId); // Log the session data
 
   res.redirect("/landing"); // Redirect to the landing page on successful login
 });
 
 // GET /signup - Render signup form
-app.get("/signup", (request, response) => {
-  response.render("signup");
+app.get("/signup", (req, res) => {
+  res.render("signup");
 });
 
 // POST /signup - Allows a user to signup
@@ -120,35 +111,40 @@ app.post("/signup", (req, res) => {
 });
 
 // GET / - Render index page or redirect to landing if logged in
-app.get("/", (request, response) => {
-  if (request.session.user) {
-    return response.redirect("/landing");
+app.get("/", (req, res) => {
+  if (req.session.userId) {
+    return res.redirect("/landing");
   }
-  response.render("index");
+  res.render("index");
 });
 
 // GET /landing - Shows a welcome page for users, shows the names of all users if an admin
 app.get("/landing", ensureAuthenticated, (req, res) => {
+  console.log("Session userId:", req.session.userId); // Log the session userId
+
   // Find the logged-in user's details based on their session data
   const user = USERS.find((u) => u.id === req.session.userId);
+  console.log("Logged-in user:", user); // Log the user found
 
   if (!user) {
     // If the user is not found in the database (e.g., manually deleted), handle the case gracefully
     req.session.destroy(() => {
+      console.log("Session destroyed, redirecting to login");
       res.redirect("/login"); // Redirect to the login page
     });
     return;
   }
 
-  // Render the landing page with the user's information
+  // Render the landing page with the user's information and all users if the logged-in user is an admin
   res.render("landing", {
-    username: user.username, // Pass the user's username to the template
-    email: user.email, // Optionally pass additional user details
-    role: user.role, // Pass the user's role (useful for role-based display or actions)
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    users: user.role === "admin" ? USERS : null, // Pass all users if admin, else null
   });
 });
 
-//POST /logout
+// POST /logout
 app.post("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {
@@ -167,6 +163,7 @@ function ensureAuthenticated(req, res, next) {
 }
 
 app.use((req, res, next) => {
+  console.log("Session data:", req.session); // Log the session data
   if (req.session.userId) {
     // Find the logged-in user
     const user = USERS.find((u) => u.id === req.session.userId);
