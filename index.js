@@ -10,7 +10,7 @@ const SALT_ROUNDS = 10;
 app.use(
   session({
     secret: "your-secret-key",
-    resave: true, // Temporarily set to true to debug
+    resave: true,
     saveUninitialized: false,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24,
